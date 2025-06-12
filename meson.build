@@ -7,7 +7,7 @@ endif
 
 sources = files('test-app.c')
 dpdk_dep = dependency('dpdk', modules : [
-    'eal', 'hash', 'jhash', 'malloc', 'ip', 'udp', 'tcp'
+    'eal', 'malloc', 'ip', 'udp', 'tcp'
 ], required : true)
 
 executable('test-app',
