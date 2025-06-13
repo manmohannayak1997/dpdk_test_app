@@ -1,132 +1,91 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include <stdio.h>
-#include <string.h>
 #include <stdint.h>
-#include <arpa/inet.h>
-
+#include <string.h>
 #include <rte_eal.h>
-#include <rte_mbuf.h>
-#include <rte_ethdev.h>
 #include <rte_ip.h>
 #include <rte_udp.h>
 #include <rte_tcp.h>
-#include <rte_ether.h>
 
-#define MBUF_CACHE_SIZE 250
-#define NUM_MBUFS 8191
-
-static struct rte_mempool *mbuf_pool = NULL;
-
-void dump_udp_packet() {
-    struct rte_mbuf *mbuf = rte_pktmbuf_alloc(mbuf_pool);
-    if (!mbuf) {
-        printf("Failed to allocate mbuf\n");
-        return;
-    }
-
-    mbuf->data_len = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + sizeof(struct udp_hdr);
-    mbuf->pkt_len = mbuf->data_len;
-
-    struct ether_hdr *eth = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
-    struct ipv4_hdr *ip = (struct ipv4_hdr *)(eth + 1);
-    struct udp_hdr *udp = (struct udp_hdr *)(ip + 1);
-
-    eth->ether_type = htons(RTE_ETHER_TYPE_IPV4);
-
-    ip->version_ihl = 0x45;
-    ip->type_of_service = 0;
-    ip->total_length = htons(sizeof(struct ipv4_hdr) + sizeof(struct udp_hdr));
-    ip->packet_id = 0;
-    ip->fragment_offset = 0;
-    ip->time_to_live = 64;
-    ip->next_proto_id = IPPROTO_UDP;
-    ip->hdr_checksum = 0;
-    ip->src_addr = htonl(IPv4(192, 168, 1, 1));
-    ip->dst_addr = htonl(IPv4(192, 168, 1, 2));
-
-    udp->src_port = htons(1234);
-    udp->dst_port = htons(5678);
-    udp->dgram_len = htons(sizeof(struct udp_hdr));
-    udp->dgram_cksum = 0;
-
-    printf("Dummy UDP Packet:\n");
-    printf("IPv4 Src: %s, Dst: %s\n", "192.168.1.1", "192.168.1.2");
-    printf("UDP Src Port: %u, Dst Port: %u\n", ntohs(udp->src_port), ntohs(udp->dst_port));
-
-    rte_pktmbuf_free(mbuf);
+void print_menu() {
+    printf("Supported commands:\n");
+    printf("  send udp   - Generate and dump a dummy UDP packet\n");
+    printf("  send tcp   - Generate and dump a dummy TCP packet\n");
+    printf("  quit       - Exit the application\n");
 }
 
-void dump_tcp_packet() {
-    struct rte_mbuf *mbuf = rte_pktmbuf_alloc(mbuf_pool);
-    if (!mbuf) {
-        printf("Failed to allocate mbuf\n");
-        return;
+void dump_packet(const uint8_t *pkt, size_t len) {
+    printf("Packet dump (%zu bytes):\n", len);
+    for (size_t i = 0; i < len; ++i) {
+        printf("%02x ", pkt[i]);
+        if ((i + 1) % 16 == 0) printf("\n");
     }
-
-    mbuf->data_len = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + sizeof(struct tcp_hdr);
-    mbuf->pkt_len = mbuf->data_len;
-
-    struct ether_hdr *eth = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
-    struct ipv4_hdr *ip = (struct ipv4_hdr *)(eth + 1);
-    struct tcp_hdr *tcp = (struct tcp_hdr *)(ip + 1);
-
-    eth->ether_type = htons(RTE_ETHER_TYPE_IPV4);
-
-    ip->version_ihl = 0x45;
-    ip->type_of_service = 0;
-    ip->total_length = htons(sizeof(struct ipv4_hdr) + sizeof(struct tcp_hdr));
-    ip->packet_id = 0;
-    ip->fragment_offset = 0;
-    ip->time_to_live = 64;
-    ip->next_proto_id = IPPROTO_TCP;
-    ip->hdr_checksum = 0;
-    ip->src_addr = htonl(IPv4(10, 0, 0, 1));
-    ip->dst_addr = htonl(IPv4(10, 0, 0, 2));
-
-    tcp->src_port = htons(1111);
-    tcp->dst_port = htons(2222);
-    tcp->sent_seq = htonl(0);
-    tcp->recv_ack = htonl(0);
-    tcp->data_off = (sizeof(struct tcp_hdr) / 4) << 4;
-    tcp->tcp_flags = 0x10;  // ACK
-    tcp->rx_win = htons(65535);
-    tcp->cksum = 0;
-    tcp->tcp_urp = 0;
-
-    printf("Dummy TCP Packet:\n");
-    printf("IPv4 Src: %s, Dst: %s\n", "10.0.0.1", "10.0.0.2");
-    printf("TCP Src Port: %u, Dst Port: %u\n", ntohs(tcp->src_port), ntohs(tcp->dst_port));
-
-    rte_pktmbuf_free(mbuf);
+    printf("\n");
 }
 
-int main(int argc, char *argv[]) {
-    int ret = rte_eal_init(argc, argv);
-    if (ret < 0)
-        rte_exit(EXIT_FAILURE, "Failed to initialize EAL\n");
+void send_udp() {
+    uint8_t pkt[] = {
+        // Ethernet header (dummy)
+        0x00,0x01,0x02,0x03,0x04,0x05, 0x06,0x07,0x08,0x09,0x0a,0x0b, 0x08,0x00,
+        // IPv4 header
+        0x45,0x00,0x00,0x1c,0x00,0x00,0x40,0x00,0x40,0x11,0x00,0x00,
+        0xc0,0xa8,0x01,0x01, 0xc0,0xa8,0x01,0x02,
+        // UDP header
+        0x30,0x39,0x00,0x35,0x00,0x08,0x00,0x00
+    };
+    dump_packet(pkt, sizeof(pkt));
+    struct rte_ipv4_hdr *ip = (struct rte_ipv4_hdr *)(pkt + 14);
+    struct rte_udp_hdr *udp = (struct rte_udp_hdr *)(pkt + 14 + sizeof(struct rte_ipv4_hdr));
+    printf("Parsed UDP: src_ip=%x dst_ip=%x src_port=%u dst_port=%u\n",
+        rte_be_to_cpu_32(ip->src_addr), rte_be_to_cpu_32(ip->dst_addr),
+        rte_be_to_cpu_16(udp->src_port), rte_be_to_cpu_16(udp->dst_port));
+}
 
-    mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS,
-                                        MBUF_CACHE_SIZE, 0,
-                                        RTE_MBUF_DEFAULT_BUF_SIZE,
-                                        rte_socket_id());
-    if (!mbuf_pool)
-        rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
+void send_tcp() {
+    uint8_t pkt[] = {
+        // Ethernet header (dummy)
+        0x00,0x01,0x02,0x03,0x04,0x05, 0x06,0x07,0x08,0x09,0x0a,0x0b, 0x08,0x00,
+        // IPv4 header
+        0x45,0x00,0x00,0x28,0x00,0x00,0x40,0x00,0x40,0x06,0x00,0x00,
+        0x0a,0x00,0x00,0x01, 0x0a,0x00,0x00,0x02,
+        // TCP header
+        0x30,0x39,0x00,0x50,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        0x50,0x02,0x20,0x00,0x00,0x00,0x00,0x00
+    };
+    dump_packet(pkt, sizeof(pkt));
+    struct rte_ipv4_hdr *ip = (struct rte_ipv4_hdr *)(pkt + 14);
+    struct rte_tcp_hdr *tcp = (struct rte_tcp_hdr *)(pkt + 14 + sizeof(struct rte_ipv4_hdr));
+    printf("Parsed TCP: src_ip=%x dst_ip=%x src_port=%u dst_port=%u\n",
+        rte_be_to_cpu_32(ip->src_addr), rte_be_to_cpu_32(ip->dst_addr),
+        rte_be_to_cpu_16(tcp->src_port), rte_be_to_cpu_16(tcp->dst_port));
+}
 
-    char input[256];
-    printf("Enter command: ");
-    if (fgets(input, sizeof(input), stdin) == NULL) {
-        printf("Error reading command\n");
+int main(int argc, char **argv) {
+    if (rte_eal_init(argc, argv) < 0) {
+        printf("EAL init failed\n");
         return -1;
     }
 
-    if (strncmp(input, "send udp", 8) == 0) {
-        dump_udp_packet();
-    } else if (strncmp(input, "send tcp", 8) == 0) {
-        dump_tcp_packet();
-    } else {
-        printf("Please enter a valid command (send udp | send tcp)\n");
+    print_menu();
+    char cmd[128];
+    while (1) {
+        printf("test_app> ");
+        if (!fgets(cmd, sizeof(cmd), stdin))
+            break;
+        cmd[strcspn(cmd, "\n")] = 0;
+        if (strcmp(cmd, "send udp") == 0) {
+            send_udp();
+        } else if (strcmp(cmd, "send tcp") == 0) {
+            send_tcp();
+        } else if (strcmp(cmd, "quit") == 0) {
+            break;
+        } else {
+            printf("Please enter a valid command.\n");
+            print_menu();
+        }
     }
 
+    rte_eal_cleanup();
     return 0;
 }
