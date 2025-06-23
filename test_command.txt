@@ -1,0 +1,20 @@
+send udp src_ip 192.168.1.29 dst_ip 192.168.1.30 src_port 200 dst_port 201
+
+send tcp src_ip 10.1.2.3 dst_ip 10.1.2.4 src_port 1234 dst_port 4321
+
+display all
+
+delete 192.168.1.29 192.168.1.30 200 201 17
+
+flush
+
+send uuudp
+
+send udp src_ip 192.168.1.999 dst_ip 192.168.1.30 src_port 200 dst_port 201
+
+send udp src_ip 192.168.1.29 dst_ip 192.168.1.30 src_port 99999 dst_port 201
+
+send udp src_ip 192.168.1.29 dst_ip 192.168.1.30 src_port 200
+
+quit
+
